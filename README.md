@@ -1,3 +1,7 @@
+# Hello nothing of note to see here
+
+Academic example for leveraging first class functions for improving file loading.
+
 # YATI (Yet Another Tiled Importer) for Godot 4
 
 This is an addon for the [Godot Engine](https://godotengine.org) for importing files (.tmx, .tmj)
