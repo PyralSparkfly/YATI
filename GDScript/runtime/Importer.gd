@@ -20,29 +20,36 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-func import(source_file: String, project_file: String = ""):
-	var tilemapCreator = preload("TilemapCreator.gd").new()
+## DL EDIT the default file loading mechanism is FileAccess (See YATI.gd)
+## But now we can override it dynamically.
+func import(source_file: String, project_file: String = "", load_file_data := YATI.load_from_file):
+	var tilemapCreator = preload("TilemapCreator.gd").new(load_file_data)
 	tilemapCreator.set_add_class_as_metadata(true)
 	if project_file != "":
 		var ct = CustomTypes.new()
-		ct.load_custom_types(project_file)
+		ct.load_custom_types(project_file, load_file_data)
 		tilemapCreator.set_custom_types(ct)
-	return tilemapCreator.create(source_file)
+	## We pass in how we want to load our Tiled map.
+	return tilemapCreator.create(source_file, load_file_data)
 
-func import_from_zip(zip_file: String, source_file_in_zip: String, project_file_in_zip: String = ""):
-	if not FileAccess.file_exists(zip_file):
-		return null
-	var za = ZipAccess.new()
-	var err = za.open(zip_file)
-	if err != OK:
-		return null
-	var tilemapCreator = preload("TilemapCreator.gd").new()
-	tilemapCreator.set_zip_access(za)
-	tilemapCreator.set_add_class_as_metadata(true)
-	if project_file_in_zip != "" and za.file_exists(project_file_in_zip):
-		var ct = CustomTypes.new()
-		ct.load_custom_types(project_file_in_zip, za)
-		tilemapCreator.set_custom_types(ct)
-	var ret = tilemapCreator.create(source_file_in_zip)
-	za.close()
-	return ret
+## DL EDIT
+## specialized zip loading is no longer necessary to load zip files.
+
+#
+#func import_from_zip(zip_file: String, source_file_in_zip: String, project_file_in_zip: String = ""):
+	#if not FileAccess.file_exists(zip_file):
+		#return null
+	#var za = ZipAccess.new()
+	#var err = za.open(zip_file)
+	#if err != OK:
+		#return null
+	#var tilemapCreator = preload("TilemapCreator.gd").new()
+	#tilemapCreator.set_zip_access(za)
+	#tilemapCreator.set_add_class_as_metadata(true)
+	#if project_file_in_zip != "" and za.file_exists(project_file_in_zip):
+		#var ct = CustomTypes.new()
+		#ct.load_custom_types(project_file_in_zip, za)
+		#tilemapCreator.set_custom_types(ct)
+	#var ret = tilemapCreator.create(source_file_in_zip)
+	#za.close()
+	#return ret

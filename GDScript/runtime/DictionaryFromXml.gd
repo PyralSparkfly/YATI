@@ -31,11 +31,19 @@ var _csv_encoded = true
 var _is_map: bool
 var _in_tileset: bool = false
 
-func create(source_file_name: String, za: ZipAccess = null):
-	var err = _xml.open(source_file_name, za)
+## DL EDIT
+## removed [param za] because again, we're a data converter, not a file loader.
+## Replace with [param source_file_bytes] instead.
+## We just care about the data itself. Not how we got it.
+## We could possibly even remove the need for source_file_name,
+## but I'm not about to scavenge for breaking changes as a result.
+## (assuming ie tileset loading still relies on it for orienting itself)
+#func create(source_file_name: String, za: ZipAccess = null):
+func create(source_file_name: String, source_file_bytes:PackedByteArray):
+	var err = _xml.open(source_file_name, source_file_bytes)
 	if err != OK:
 		return null
-
+	## DL EDIT - we have our parser now. So we just have to parse.
 	_current_element = _xml.next_element()
 	_current_dictionary = _result
 	var base_attributes = _xml.get_attributes()

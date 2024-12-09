@@ -69,7 +69,13 @@ var _custom_data_prefix: String = ""
 var _tileset_save_path: String = ""
 var _object_groups
 var _ct: CustomTypes = null
-var _za: ZipAccess = null
+## DL EDIT
+## Instead of saving whether or not we use zip files
+#var _za: ZipAccess = null
+## We're going to save our actual file loading function
+## By default, we'll assume load via our FileAccess implementation,
+## but importantly we can now change this on demand.
+var _load_file_data:Callable = YATI.load_from_file
 
 var _iso_rot: float = 0.0
 var _iso_skew: float = 0.0
@@ -93,6 +99,12 @@ enum _godot_type {
 	INSTANCE,
 	UNKNOWN
 }
+
+
+## DL EDIT
+## QUick and lazy constructor again for setting the loading mechanism
+func _init(asset_loader:Callable)->void:
+	_load_file_data = asset_loader
 
 
 func custom_compare(a: Dictionary, b: Dictionary):
@@ -137,9 +149,10 @@ func set_custom_types(ct: CustomTypes):
 func set_save_tileset_to(path: String):
 	_tileset_save_path = path
 
-
-func set_zip_access(za: ZipAccess):
-	_za = za
+## DL EDIT
+## Not necessary now.
+#func set_zip_access(za: ZipAccess):
+	#_za = za
 
 
 func get_tileset():
@@ -154,10 +167,13 @@ func recursively_change_owner(node: Node, new_owner: Node):
 		recursively_change_owner(child, new_owner)
 
 
-func create(source_file: String):
+## DL EDIT
+## [param load_file_data] func(path:String)->PackedByteArray - loads a requested file.
+func create(source_file: String, load_file_data:Callable):
 	_godot_version = Engine.get_version_info()["hex"]
 	_base_path = source_file.get_base_dir()
-	var base_dictionary = preload("DictionaryBuilder.gd").new().get_dictionary(source_file, _za)
+	var base_dictionary:Dictionary \
+		= YATI.DICTIONARY_BUILDER.new().get_dictionary(source_file, load_file_data)
 	_map_orientation = base_dictionary.get("orientation", "othogonal")
 	_map_width = base_dictionary.get("width", 0)
 	_map_height = base_dictionary.get("height", 0)
@@ -175,13 +191,14 @@ func create(source_file: String):
 		var tilesets = base_dictionary["tilesets"]
 		for tileSet in tilesets:
 			_first_gids.append(int(tileSet["firstgid"]))
-		var tileset_creator = preload("TilesetCreator.gd").new()
+		var tileset_creator = preload("TilesetCreator.gd").new(_load_file_data)
 		tileset_creator.set_base_path(source_file)
 		tileset_creator.set_map_parameters(Vector2i(_map_tile_width, _map_tile_height))
 		if _ct != null:
 			tileset_creator.set_custom_types(_ct)	
-		if _za != null:
-			tileset_creator.set_zip_access(_za)	
+		## DL EDIT no need for special case zip access.
+		#if _za != null:
+			#tileset_creator.set_zip_access(_za)	
 		if _map_wangset_to_terrain:
 			tileset_creator.map_wangset_to_terrain()
 		tileset_creator.set_custom_data_prefix(_custom_data_prefix)
@@ -386,38 +403,44 @@ func handle_layer(layer: Dictionary, parent: Node2D):
 		texture_rect.visible = layer_visible
 
 		var texture_path = layer["image"]
-		var file_not_found: bool = true
-		if _za:
-			if not _za.file_exists(texture_path):
-				texture_path = cleanup_path(_base_path.get_base_dir().path_join(layer["image"]))
-			if not _za.file_exists(texture_path):
-				texture_path = cleanup_path(_base_path.path_join(layer["image"]))
-			if _za.file_exists(texture_path):
-				var image = Image.new()
-				var extension = texture_path.get_extension().to_lower()
-				match extension:
-					"png":
-						image.load_png_from_buffer(_za.get_file(texture_path))
-					"jpg", "jpeg":
-						image.load_jpg_from_buffer(_za.get_file(texture_path))
-					"bmp":
-						image.load_bmp_from_buffer(_za.get_file(texture_path))
-				texture_rect.texture = ImageTexture.create_from_image(image)
-				file_not_found = false
-		else:
-			if not FileAccess.file_exists(texture_path):
-				texture_path = _base_path.get_base_dir().path_join(layer["image"])
-			if not FileAccess.file_exists(texture_path):
-				texture_path = _base_path.path_join(layer["image"])
-			if FileAccess.file_exists(texture_path):
-				texture_rect.texture = load(texture_path)
-				var exists = ResourceLoader.exists(texture_path, "Image")
-				if exists:
-					texture_rect.texture = load(texture_path)
-				else:
-					var image = Image.load_from_file(texture_path)
-					texture_rect.texture = ImageTexture.create_from_image(image)
-				file_not_found = false
+		var image_bytes:PackedByteArray = _load_file_data.call(texture_path)
+		var file_not_found: bool = image_bytes.is_empty()
+		## DL EDIT
+		## There's a lot happening here with brute force filepath finding
+		## Possible something I didn't understand slipped through
+		if not file_not_found:
+			texture_rect.texture = YATI.load_texture_from_buffer(texture_path, image_bytes)
+		#if _za:
+			#if not _za.file_exists(texture_path):
+				#texture_path = cleanup_path(_base_path.get_base_dir().path_join(layer["image"]))
+			#if not _za.file_exists(texture_path):
+				#texture_path = cleanup_path(_base_path.path_join(layer["image"]))
+			#if _za.file_exists(texture_path):
+				#var image = Image.new()
+				#var extension = texture_path.get_extension().to_lower()
+				#match extension:
+					#"png":
+						#image.load_png_from_buffer(_za.get_file(texture_path))
+					#"jpg", "jpeg":
+						#image.load_jpg_from_buffer(_za.get_file(texture_path))
+					#"bmp":
+						#image.load_bmp_from_buffer(_za.get_file(texture_path))
+				#texture_rect.texture = ImageTexture.create_from_image(image)
+				#
+		#else:
+			#if not FileAccess.file_exists(texture_path):
+				#texture_path = _base_path.get_base_dir().path_join(layer["image"])
+			#if not FileAccess.file_exists(texture_path):
+				#texture_path = _base_path.path_join(layer["image"])
+			#if FileAccess.file_exists(texture_path):
+				#texture_rect.texture = load(texture_path)
+				#var exists = ResourceLoader.exists(texture_path, "Image")
+				#if exists:
+					#texture_rect.texture = load(texture_path)
+				#else:
+					#var image = Image.load_from_file(texture_path)
+					#texture_rect.texture = ImageTexture.create_from_image(image)
+				#file_not_found = false
 
 		if file_not_found:
 			printerr("ERROR: Image file '" + layer["image"] + "' not found.")
@@ -425,6 +448,7 @@ func handle_layer(layer: Dictionary, parent: Node2D):
 
 		if layer.has("properties"):
 			handle_properties(texture_rect, layer["properties"])
+
 
 func handle_parallaxes(parent: Node, layer_node: Node, layer_dict: Dictionary):
 	if layer_dict.has("parallaxx") or layer_dict.has("parallaxy"):
@@ -723,31 +747,6 @@ func convert_metadata_to_obj_properties(td: TileData, obj: Dictionary) -> void:
 		else:
 			obj["properties"] = [prop_dict]
 
-func cleanup_path(path: String) -> String:
-	while true:
-		var path_arr = path.split("/")
-		var is_clean: bool = true
-		for i in range(1, path_arr.size()):
-			if path_arr[i] == "..":
-				path_arr[i] = ""
-				path_arr[i-1] = ""
-				is_clean = false
-				break
-			if path_arr[i] == ".":
-				path_arr[i] = ""
-				is_clean = false
-		var new_path = ""
-		for t in path_arr:
-			if t == "": continue
-			if new_path != "":
-				new_path += "/"
-			if t != "":
-				new_path += t
-		if is_clean:
-			return new_path
-		path = new_path
-	return ""
-
 func handle_object(obj: Dictionary, layer_node: Node, tileset: TileSet, offset: Vector2) -> void:
 	var obj_id = obj.get("id", 0)
 	var obj_x = obj.get("x", offset.x)
@@ -783,14 +782,17 @@ func handle_object(obj: Dictionary, layer_node: Node, tileset: TileSet, offset: 
 
 	if obj.has("template"):
 		var template_path = _base_path.path_join(obj["template"])
-		if _za and not _za.file_exists(template_path):
-			template_path = cleanup_path(template_path)
-		var template_dict = preload("DictionaryBuilder.gd").new().get_dictionary(template_path, _za)
+		## DL EDIT
+		## I don't really know if this is needed or not as I don't know exactly what all
+		## is going on.
+		#if _za and not _za.file_exists(template_path):
+		template_path = YATI.cleanup_path(template_path)
+		var template_dict = YATI.DICTIONARY_BUILDER.new().get_dictionary(template_path, _load_file_data)
 		var template_tileset = null
 
 		if template_dict.has("tilesets"):
-			var tilesets = template_dict["tilesets"]
-			var tileset_creator = preload("TilesetCreator.gd").new()
+			var tilesets:Array = template_dict["tilesets"]
+			var tileset_creator = YATI.TILESET_CREATOR.new(_load_file_data)
 			tileset_creator.set_base_path(template_path)
 			tileset_creator.set_map_parameters(Vector2i(_map_tile_width, _map_tile_height))
 			if _map_wangset_to_terrain:
@@ -1605,11 +1607,14 @@ func load_resource_from_file(path: String):
 	var orig_path = path
 	var ret: Resource = null
 	
-	if _za:
-		# Resources cannot be loaded from Zip but maybe they are provided nearby
-		path = _za.get_zip_file_path().get_base_dir().path_join(orig_path)
-		if not FileAccess.file_exists(path):
-			path = _za.get_zip_file_path().get_basename().path_join(orig_path)
+	## DL EDIT
+	## I don't know what contexts require loading resources at runtime.
+	## commenting this for the moment just so I can test.
+	#if _za:
+		## Resources cannot be loaded from Zip but maybe they are provided nearby
+		#path = _za.get_zip_file_path().get_base_dir().path_join(orig_path)
+		#if not FileAccess.file_exists(path):
+			#path = _za.get_zip_file_path().get_basename().path_join(orig_path)
 
 	if not FileAccess.file_exists(path):
 		path = _base_path.get_base_dir().path_join(orig_path)

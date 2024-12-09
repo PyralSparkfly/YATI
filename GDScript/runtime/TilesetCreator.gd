@@ -55,7 +55,13 @@ var _tileset_orientation
 var _map_wangset_to_terrain: bool = false
 var _custom_data_prefix: String
 var _ct: CustomTypes = null
-var _za: ZipAccess = null
+## DL EDIT
+## Instead of saving whether or not we use zip files
+#var _za: ZipAccess = null
+## We're going to save our actual file loading function
+## By default, we'll assume load via our FileAccess implementation,
+## but importantly we can now change this on demand.
+var _load_file_data:Callable = YATI.load_from_file
 var _current_first_gid = -1
 
 
@@ -64,6 +70,12 @@ enum layer_type {
 	NAVIGATION,
 	OCCLUSION
 }
+
+
+## DL EDIT to be quick and laazy, let's inject our
+## chosen file loader into the constructor.
+func _init(asset_loader:Callable)->void:
+	_load_file_data = asset_loader
 
 
 func get_error_count():
@@ -86,9 +98,9 @@ func set_map_parameters(map_tile_size: Vector2i):
 func set_custom_types(ct: CustomTypes):
 	_ct = ct
 
-
-func set_zip_access(za: ZipAccess):
-	_za = za
+## DL EDIT don't need special case zip access.
+#func set_zip_access(za: ZipAccess):
+	#_za = za
 
 
 func map_wangset_to_terrain():
@@ -109,15 +121,22 @@ func create_from_dictionary_array(tileSets: Array):
 			# Catch the AutoMap Rules tileset (is Tiled internal)
 			if checked_file.begins_with(":/automap"):
 				continue # This is no error skip it
+ 			
+			## DL EDIT
+			## We don't have to do this here. We can do it in our
+			## file loading Callable (YATI.gd)
+			#if _za:
+				#if not _za.file_exists(checked_file):
+					#checked_file = cleanup_path(_base_path_map.path_join(checked_file))
+			#elif not FileAccess.file_exists(checked_file):
+				#checked_file = _base_path_map.path_join(checked_file)
+			#_base_path_tileset = checked_file.get_base_dir()
  
-			if _za:
-				if not _za.file_exists(checked_file):
-					checked_file = cleanup_path(_base_path_map.path_join(checked_file))
-			elif not FileAccess.file_exists(checked_file):
-				checked_file = _base_path_map.path_join(checked_file)
-			_base_path_tileset = checked_file.get_base_dir()
- 
-			tile_set_dict = preload("DictionaryBuilder.gd").new().get_dictionary(checked_file, _za)
+			## DL EDIT
+			## Smart that you recursively use DictionaryBuilder.
+			## We can now pass in the file and file loading function as
+			## parameters easily.
+			tile_set_dict = YATI.DICTIONARY_BUILDER.new().get_dictionary(checked_file, _load_file_data)
 			if tile_set_dict != null and tile_set.has("firstgid"):
 				tile_set_dict["firstgid"] = tile_set["firstgid"]
 	
@@ -133,7 +152,10 @@ func create_from_dictionary_array(tileSets: Array):
 
 
 func create_from_file(source_file: String):
-	var tile_set = preload("DictionaryBuilder.gd").new().get_dictionary(source_file)
+	## DL EDIT
+	## I don't know what context this is called but for sake of consistency,
+	## We'll pass in the file load method into the next dictionary builder.
+	var tile_set = YATI.DICTIONARY_BUILDER.new().get_dictionary(source_file, _load_file_data)
 	create_or_append(tile_set)
 	return _tileset
 
@@ -224,64 +246,17 @@ func create_or_append(tile_set: Dictionary):
 	if tile_set.has("properties"):
 		handle_tileset_properties(tile_set["properties"])
 
-func cleanup_path(path: String) -> String:
-	while true:
-		var path_arr = path.split("/")
-		var is_clean: bool = true
-		for i in range(1, path_arr.size()):
-			if path_arr[i] == "..":
-				path_arr[i] = ""
-				path_arr[i-1] = ""
-				is_clean = false
-				break
-			if path_arr[i] == ".":
-				path_arr[i] = ""
-				is_clean = false
-		var new_path = ""
-		for t in path_arr:
-			if t == "": continue
-			if new_path != "":
-				new_path += "/"
-			if t != "":
-				new_path += t
-		if is_clean:
-			return new_path
-		path = new_path
-	return ""
 
-func load_image(path: String):
+func load_image(path: String)->Texture2D:
 	var orig_path = path
-	var ret: Texture2D = null
-	if _za:
-		if not _za.file_exists(path):
-			path = cleanup_path(_base_path_map.get_base_dir().path_join(orig_path))
-		if not _za.file_exists(path):
-			path = cleanup_path(_base_path_tileset.path_join(orig_path))
-		if _za.file_exists(path):
-			var image = Image.new()
-			var extension = path.get_extension().to_lower()
-			match extension:
-				"png":
-					image.load_png_from_buffer(_za.get_file(path))
-				"jpg", "jpeg":
-					image.load_jpg_from_buffer(_za.get_file(path))
-				"bmp":
-					image.load_bmp_from_buffer(_za.get_file(path))
-			ret = ImageTexture.create_from_image(image)
-	else:
-		if not FileAccess.file_exists(path):
-			path = _base_path_map.get_base_dir().path_join(orig_path)
-		if not FileAccess.file_exists(path):
-			path = _base_path_tileset.path_join(orig_path)
-		if FileAccess.file_exists(path):
-			var exists = ResourceLoader.exists(path, "Image")
-			if exists:
-				ret = load(path)
-			else:
-				var image = Image.load_from_file(path)
-				ret = ImageTexture.create_from_image(image)
+	## DL EDIT
+	## Remember that we can just generic call for bytes, 
+	## then outsource the matching of the extension to the type.
+	## You could do other tricks but this is the simplest for this.
+	var image_bytes: PackedByteArray = _load_file_data.call(path)
+	var ret: Texture2D = YATI.load_texture_from_buffer(path, image_bytes)
 
-	if ret == null:
+	if image_bytes.is_empty() or ret == null:
 		printerr("ERROR: Image file '" + orig_path + "' not found.")
 		_error_count += 1
 

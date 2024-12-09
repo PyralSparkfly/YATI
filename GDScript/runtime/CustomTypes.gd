@@ -26,8 +26,10 @@ extends RefCounted
 
 var _custom_types = null
 
-func load_custom_types(project_file: String, za: ZipAccess = null):
-	var project_file_as_dictionary = preload("DictionaryBuilder.gd").new().get_dictionary(project_file, za)
+## DL EDIT I actually don't know how custom types work or are invoked.
+func load_custom_types(project_file: String, load_file_data:Callable):
+	var project_file_as_dictionary = \
+		preload("DictionaryBuilder.gd").new().get_dictionary(project_file, load_file_data)
 	if project_file_as_dictionary.has("propertyTypes"):
 		_custom_types = project_file_as_dictionary["propertyTypes"]
 

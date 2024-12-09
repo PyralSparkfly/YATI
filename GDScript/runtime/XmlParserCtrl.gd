@@ -22,15 +22,21 @@
 
 extends RefCounted
 
-var _parser = null
+var _parser:XMLParser = null
 var _parsed_file_name = ""
 
 func _init():
 	_parser = XMLParser.new()
 
-func open(source_file, za: ZipAccess) -> int:
+## DL EDIT
+## Remember, we don't care how data loading works. We only want to parse it.
+#func open(source_file, za: ZipAccess) -> int:
+	#_parsed_file_name = source_file
+	#return _parser.open_buffer(za.get_file(_parsed_file_name)) if za else _parser.open(_parsed_file_name)
+## So instead of branching how the XML parser loads, directly feed this in instead.
+func open(source_file:String, source_file_bytes:PackedByteArray) -> int:
 	_parsed_file_name = source_file
-	return _parser.open_buffer(za.get_file(_parsed_file_name)) if za else _parser.open(_parsed_file_name)
+	return _parser.open_buffer(source_file_bytes)
 
 func next_element():
 	var err = parse_on()
